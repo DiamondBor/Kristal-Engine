@@ -10,3 +10,6 @@ output/
 *.tiled-session
 
 docs.json
+/sharedlibs
+Kristal.lnk
+open.bat

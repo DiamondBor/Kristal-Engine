@@ -289,10 +289,9 @@ function TiledUtils.relativePathToAssetId(target_dir, asset_path, source_dir)
     end
 
     -- Strip library directory prefix
-    if dest_parts[1] == "libraries" then
-        for _ = 2, up_count do
-            table.remove(dest_parts, 1)
-        end
+    if dest_parts[1] == "libraries" and dest_parts[2] then
+        table.remove(dest_parts, 1)
+        table.remove(dest_parts, 1)
     end
 
     local final_path = table.concat(TableUtils.merge(base_parts, dest_parts), "/")

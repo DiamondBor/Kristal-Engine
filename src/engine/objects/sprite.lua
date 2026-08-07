@@ -180,6 +180,7 @@ end
 --- *(Called internally)* Sets the current sprite to a single texture. \
 --- **Note**: *Only for internal overrides. Use `Sprite:setSprite()` instead.*
 function Sprite:setTextureExact(texture)
+    local texture_path = type(texture) == "string" and texture or nil
     if type(texture) == "string" then
         self.texture = Assets.getTexture(texture)
     else
@@ -188,7 +189,7 @@ function Sprite:setTextureExact(texture)
     if (not self.texture) and (texture ~= nil) then
         Kristal.Console:warn("Texture not found: " .. TableUtils.dump(texture))
     end
-    self.texture_path = Assets.getTextureID(texture)
+    self.texture_path = texture_path or Assets.getTextureID(texture) or Assets.getTextureID(self.texture)
     if self.use_texture_size then
         if self.texture then
             self.width = self.texture:getWidth()

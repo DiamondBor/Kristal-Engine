@@ -9,6 +9,8 @@
 local Mods = {}
 local self = Mods
 
+local compile_state = nil
+
 -- TODO: Document mod data
 
 ---@alias ProjectInfo table
@@ -146,6 +148,16 @@ function Mods.getMod(id)
     return self.data[id] or (self.named[id] and self.data[self.named[id]])
 end
 
+local function compileStep()
+    local state = compile_state
+    if not state then return end
+    local frame = FRAMERATE > 0 and (1 / FRAMERATE) or (1 / 60)
+    if love.timer.getTime() - state.budget_at >= math.max(frame * 0.7, 0.012) then
+        coroutine.yield()
+        state.budget_at = love.timer.getTime()
+    end
+end
+
 ---@param id string
 ---@return ProjectInfo?
 function Mods.getAndLoadMod(id)
@@ -156,13 +168,27 @@ function Mods.getAndLoadMod(id)
     end
 
     if not mod.loaded_scripts then
-        for _, path in ipairs(FileSystemUtils.getFilesRecursive(mod.path, ".lua")) do
+        local files = FileSystemUtils.getFilesRecursive(mod.path, ".lua")
+        for _, path in ipairs(files) do
             mod.script_chunks[path] = love.filesystem.load(mod.path .. "/" .. path .. ".lua")
+            compileStep()
         end
 
         for _, lib in pairs(mod.libs) do
-            for _, path in ipairs(FileSystemUtils.getFilesRecursive(lib.path, ".lua")) do
+            local paths
+            if lib.path:sub(1, #mod.path + 1) == mod.path .. "/" then
+                local prefix = lib.path:sub(#mod.path + 2) .. "/"
+                paths = {}
+                for _, path in ipairs(files) do
+                    if path:sub(1, #prefix) == prefix then
+                        table.insert(paths, path:sub(#prefix + 1))
+                    end
+                end
+                --if #paths == 0 then paths = nil end
+            end
+            for _, path in ipairs(paths or FileSystemUtils.getFilesRecursive(lib.path, ".lua")) do
                 lib.script_chunks[path] = love.filesystem.load(lib.path .. "/" .. path .. ".lua")
+                compileStep()
             end
         end
 
@@ -170,6 +196,25 @@ function Mods.getAndLoadMod(id)
     end
 
     return mod
+end
+
+---@param id string
+---@return ProjectInfo?
+---@return table? steps
+function Mods.loadModScriptSteps(id)
+    local mod = self.getMod(id)
+
+    if not mod or mod.loaded_scripts then return mod, nil end
+
+    local steps = {}
+    steps.thread = coroutine.create(function()
+        compile_state = steps
+        steps.budget_at = love.timer.getTime()
+        self.getAndLoadMod(id)
+        compile_state = nil
+    end)
+
+    return mod, steps
 end
 
 ---@param id string

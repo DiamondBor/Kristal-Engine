@@ -1,3 +1,4 @@
+local LoadingMode = require("src.engine.loading.LoadingMode")
 local Loading = {}
 
 function Loading:init()
@@ -15,6 +16,8 @@ Loading.States = {
 function Loading:enter(from, dir)
     Mod = nil
     MOD_PATH = nil
+
+    self.enter_time = love.timer.getTime()
 
     self.loading_state = Loading.States.WAITING
 
@@ -55,7 +58,6 @@ function Loading:beginLoad()
 
     self.loading_state = Loading.States.LOADING
 
-    Kristal.loadAssets("", "all", "")
     Kristal.loadAssets("", "mods", "", function()
         self.loading_state = Loading.States.DONE
 
@@ -77,9 +79,14 @@ function Loading:update()
         return
     end
 
-    if (self.loading_state == Loading.States.DONE) and self.key_check and (self.animation_done or Kristal.Config["skipIntro"]) then
+    local loaded, total = Assets.getAssetCount()
+    if (self.loading_state == Loading.States.DONE) and (loaded >= total or Kristal.Config["engineLoadingMode"] == LoadingMode.LAZY) and self.key_check and (self.animation_done or Kristal.Config["skipIntro"]) then
         -- We're done loading! This should only happen once.
         self.done_loading = true
+
+        if Kristal.Config["verboseLoader"] then
+            print(string.format("[Assets] Loading finished in %.1fms (%d/%d assets loaded)", (love.timer.getTime() - self.enter_time) * 1000, loaded, total))
+        end
 
         if Kristal.Args["test"] and (not RELEASE_MODE) then
             Kristal.setState("Testing")

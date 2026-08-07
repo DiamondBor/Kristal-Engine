@@ -2,6 +2,31 @@
 local MathUtils = {}
 
 ---
+--- Compares two values using a specific comparator
+---
+--- @param a number # First value to compare
+--- @param b number # Second value to compare
+--- @param comparator "=="|"~="|">"|"<"|">="|"<=" # The comparator to use
+--- @return boolean # Whether the check was successful or not
+---
+function MathUtils.compare(a, b, comparator)
+    local comparators = {
+        ["=="] = function(_a, _b) return _a == _b end,
+        ["~="] = function(_a, _b) return _a ~= _b end,
+        [">"]  = function(_a, _b) return a > _b end,
+        ["<"]  = function(_a, _b) return _a < _b end,
+        [">="] = function(_a, _b) return _a >= _b end,
+        ["<="] = function(_a, _b) return _a <= _b end,
+    }
+
+    if not comparators[comparator] then
+        error("Comparator "..comparator.." is invalid.")
+    end
+
+    return comparators[comparator](a, b)
+end
+
+---
 --- Checks if a number is an integer.
 ---
 ---@param value number # The number to check.

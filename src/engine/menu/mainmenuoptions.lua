@@ -1,3 +1,4 @@
+local LoadingMode = require("src.engine.loading.LoadingMode")
 ---@class (exact) MainMenuOptions : StateClass, StateManagedClass
 ---
 ---@field menu MainMenu
@@ -80,6 +81,7 @@ function MainMenuOptions:onEnter(old_state)
 end
 
 function MainMenuOptions:onLeave()
+    Kristal.Loader.in_channel:push({ config = Kristal.Config })
     self:setState("NONE")
 end
 
@@ -534,10 +536,27 @@ function MainMenuOptions:registerConfigOption(page, name, config, callback)
     )
 end
 
+local function toPascalCase(str)
+    local final_str = ""
+    local uppercase = true
+    for char in string.gmatch(str, utf8.charpattern) do
+        if char == "_" then
+            uppercase = true
+        elseif uppercase then
+            uppercase = false
+            final_str = final_str .. string.upper(char)
+        else
+            final_str = final_str .. string.lower(char)
+        end
+    end
+    return final_str
+end
+
 function MainMenuOptions:initializeOptions()
     self:registerOptionsPage("general", "GENERAL")
     self:registerOptionsPage("graphics", "GRAPHICS")
     self:registerOptionsPage("engine", "ENGINE")
+    self:registerOptionsPage("loading", "LOADING")
 
     ---------------------
     -- General Options
@@ -673,6 +692,26 @@ function MainMenuOptions:initializeOptions()
     self:registerConfigOption("engine", "Use System Mouse", "systemCursor", function() Kristal.updateCursor() end)
     self:registerConfigOption("engine", "Always Show Mouse", "alwaysShowCursor", function() Kristal.updateCursor() end)
     self:registerConfigOption("engine", "Instant Quit", "instantQuit")
+
+    ---------------------
+    -- Loading options
+    ---------------------
+
+    self:registerOption("loading", "Engine Loader Mode", function(x, y)
+            Draw.printShadow(toPascalCase(TableUtils.getKey(LoadingMode --[[@as table]], Kristal.Config["engineLoadingMode"])), x, y)
+        end, function()
+            Kristal.Config["engineLoadingMode"] = (Kristal.Config["engineLoadingMode"] + 1) % 3
+        end
+    )
+
+    self:registerOption("loading", "Mod Loader Mode", function(x, y)
+            Draw.printShadow(toPascalCase(TableUtils.getKey(LoadingMode --[[@as table]], Kristal.Config["projectLoadingMode"])), x, y)
+        end, function()
+            Kristal.Config["projectLoadingMode"] = (Kristal.Config["projectLoadingMode"] + 1) % 3
+        end
+    )
+    
+    self:registerConfigOption("loading", "Loading Screen", "showLoadingScreen")
 end
 
 return MainMenuOptions

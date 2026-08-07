@@ -419,6 +419,35 @@ function Draw.printShadow(text, x, y, offset, align, limit)
     love.graphics.printf(text, x, y, limit or width, align or "left")
 end
 
+--- Similar to Draw.printShadow, but draws an outline instead of a shadow.
+--- Uses the current draw color (and its alpha) for the fill and the outline.
+---@param text string|table
+---@param x? number
+---@param y? number
+---@param offset? number        # Outline thickness in pixels. (Defaults to 2)
+---@param align? love.AlignMode
+---@param limit? number
+---@param color? table
+function Draw.printOutline(text, x, y, offset, align, limit, color)
+    x, y, offset = x or 0, y or 0, offset or 2
+
+    local r, g, b, a = love.graphics.getColor()
+    local width = love.graphics.getFont():getWidth(Utils.getCombinedText(text))
+    color = color or {0, 0, 0, a}
+
+    love.graphics.setColor(TableUtils.unpack(color))
+    for ox = -1, 1 do
+        for oy = -1, 1 do
+            if ox ~= 0 or oy ~= 0 then
+                love.graphics.printf(text, x + ox * offset, y + oy * offset, limit or width, align or "left")
+            end
+        end
+    end
+
+    love.graphics.setColor(r, g, b, a)
+    love.graphics.printf(text, x, y, limit or width, align or "left")
+end
+
 --- Modes: `none`
 --- - `none`: Creates a canvas based on object size and draws the object at 0,0 (not transformed)
 ---

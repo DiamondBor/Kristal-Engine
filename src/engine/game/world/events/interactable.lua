@@ -70,11 +70,19 @@ function Interactable:onAdd(parent)
 end
 
 function Interactable:onInteract(player, dir)
+    -- TODO: ok so maybe this line might cause an issue for interactables that simply
+    -- Dont run code because they overlap with another interactable/because theres already a running cutscene
+    -- Maybe think of workaround for this later idk
     self.interact_count = self.interact_count + 1
 
     if self.script then
         Registry.getEventScript(self.script)(self, player, dir)
     end
+
+    if self.world:hasCutscene() then
+        return false
+    end
+
     local current_cutscene
     if self.cutscene then
         current_cutscene = self.world:startCutscene(self.cutscene, self, player, dir)
