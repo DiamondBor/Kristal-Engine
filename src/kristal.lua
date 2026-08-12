@@ -160,6 +160,9 @@ function love.load(args)
     Registry.initialize()
     Registry.saveData()
 
+    -- register collisions
+    CollisionRegistry.refresh()
+
     -- Chapter defaults
     Kristal.ChapterConfigs = {}
     Kristal.ChapterConfigs[1] = JSON.decode(love.filesystem.read("configs/chapter1.json"))
@@ -1266,6 +1269,9 @@ function Kristal.clearModState()
     Assets.getBucket("project"):unload()
     Registry.restoreData()
 
+    -- Refresh the collision registry
+    CollisionRegistry.refresh()
+
     -- force garbage collection
     collectgarbage("collect")
 end
@@ -1613,6 +1619,9 @@ function Kristal.preInitMod(id)
 
     -- Initialize registry
     Registry.initialize()
+
+    -- Refresh collision registry
+    CollisionRegistry.refresh()
 
     -- Return true if no "preInit" explicitly returns true
     return use_callback
