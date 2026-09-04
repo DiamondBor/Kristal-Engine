@@ -105,7 +105,28 @@ end
 
 function ClimbExit:getDebugInfo()
     local info = super.getDebugInfo(self)
+
+    table.insert(info, "Exit direction: " .. (tostring(self:getExitDirection()) or "NONE"))
+
+    local exit_x, exit_y = self:getExitPosition()
+    table.insert(info, string.format("Exit position: (%s, %s)", tostring(exit_x), tostring(exit_y)))
+    table.insert(info, "Can exit: " .. tostring(self.can_exit))
+
     return info
+end
+
+function ClimbExit:draw()
+    super.draw(self)
+
+    if DEBUG_RENDER and self.can_exit then
+        local x, y = self:getExitPosition()
+        local target_x, target_y = Game.world:getRelativePos(x, y, self)
+
+        love.graphics.setColor(0.5, 0, 1, 1)
+        love.graphics.setLineWidth(2)
+        love.graphics.line(self.width / 2, self.height / 2, target_x, target_y)
+        Draw.drawArrow(self.width / 2, self.height / 2, target_x, target_y, 12)
+    end
 end
 
 return ClimbExit

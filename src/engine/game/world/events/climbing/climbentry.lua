@@ -91,4 +91,26 @@ function ClimbEntry:onInteract(player, dir)
     return true
 end
 
+function ClimbEntry:getDebugInfo()
+    local info = super.getDebugInfo(self)
+
+    table.insert(info, "Is solid: " .. (self.solid and "True" or "False"))
+
+    return info
+end
+
+function ClimbEntry:draw()
+    super.draw(self)
+
+    if DEBUG_RENDER then
+        local x, y = self.target:getRelativeJumpTarget()
+        local world_x, world_y = self.target:getRelativePos(x, y, Game.world)
+        local target_x, target_y = Game.world:getRelativePos(world_x, world_y, self)
+
+        love.graphics.setColor(1, 0, 1, 1)
+        love.graphics.setLineWidth(2)
+        Draw.drawArrow(self.width / 2, self.height / 2, target_x, target_y, 12)
+    end
+end
+
 return ClimbEntry

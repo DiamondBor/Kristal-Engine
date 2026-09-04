@@ -104,6 +104,10 @@ function love.load(args)
         end
     end
 
+    if Kristal.Args["disable-stdout-buffer"] then
+        io.stdout:setvbuf("no")
+    end
+
     -- load the version
     Kristal.Version = SemVer(love.filesystem.read("VERSION"))
 
@@ -325,11 +329,10 @@ function Kristal.drawBorders()
             love.graphics.scale(Kristal.getGameScale())
             Draw.setColor(1, 1, 1, dynamic and BORDER_ALPHA or 1)
             love.graphics.push("all")
+            local border_width, border_height = 1920 * BORDER_SCALE, 1080 * BORDER_SCALE
             love.graphics.translate(
-                ((love.graphics.getWidth() / Kristal.getGameScale())) / 2 +
-                (((love.graphics.getHeight() / Kristal.getGameScale()) / -2) * (16 / 9)),
-                ((love.graphics.getHeight() / Kristal.getGameScale()) / 2) +
-                ((love.graphics.getHeight() / Kristal.getGameScale()) / -2)
+                (love.graphics.getWidth() / Kristal.getGameScale() - border_width) / 2,
+                (love.graphics.getHeight() / Kristal.getGameScale() - border_height) / 2
             )
             if border_texture then
                 Draw.draw(border_texture, 0, 0, 0, BORDER_SCALE)
@@ -2228,7 +2231,7 @@ function Kristal.markDeprecated(level, name, api_type, deprecation_type, new_nam
     else
         api_name_type = api_type .. " " .. name
     end
-    local deprecation_message = string.format("Using deprecated %s %s", api_name_type, name)
+    local deprecation_message = string.format("Using deprecated %s", api_name_type)
     if deprecation_type == "replaced" then
         deprecation_message = string.format("%s (replaced by %s)", deprecation_message, new_name)
     ---@diagnostic disable-next-line: unknown-diag-code # LuaLS doesn't have unnecessary-if
