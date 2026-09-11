@@ -817,7 +817,7 @@ end
 function Assets.startSound(sound)
     local src = self.getSound(sound)
     if not src then
-        Kristal.Console:warn("Sound not found: \"" .. sound .. "\"")
+        Logging.warnNotify("Sound not found: \"" .. sound .. "\"")
         return nil
     end
     src:stop()
@@ -872,7 +872,7 @@ function Assets.playSound(sound, volume, pitch)
 
         return src
     else
-        Kristal.Console:warn("Sound not found: \"" .. sound .. "\"")
+        Logging.warnNotify("Sound not found: \"" .. sound .. "\"")
     end
 end
 
