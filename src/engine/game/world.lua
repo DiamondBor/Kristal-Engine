@@ -424,8 +424,10 @@ function World:onKeyPressed(key)
             if self.music then
                 if self.music:isPlaying() then
                     self.music:pause()
+                    Debug.LOGGER:infoNotify("World music: " .. FormatString("PAUSED", ConsoleFormats.YELLOW))
                 else
                     self.music:resume()
+                    Debug.LOGGER:infoNotify("World music: " .. FormatString("RESUMED", ConsoleFormats.GREEN))
                 end
             end
         end
@@ -446,28 +448,31 @@ function World:onKeyPressed(key)
             for _, party in ipairs(Game.party) do
                 party:heal(math.huge)
             end
-        end
-        if key == "b" then
-            Game.world:hurtParty(math.huge)
+            Debug.LOGGER:infoNotify(FormatString("Healed party", ConsoleFormats.GREEN))
         end
         if key == "k" then
             Game:setTension(Game:getMaxTension())
             Assets.playSound("cardrive", 0.8, 1.4)
+            Debug.LOGGER:infoNotify("Tension: " .. FormatString("100%", ConsoleFormats.YELLOW))
         end
         if key == "n" then
             NOCLIP = not NOCLIP
             if NOCLIP then
                 Assets.playSound("petrify")
+                Debug.LOGGER:infoNotify("Noclip: " .. FormatString("ON", ConsoleFormats.GREEN))
             else
                 Assets.playSound("bump")
+                Debug.LOGGER:infoNotify("Noclip: " .. FormatString("OFF", ConsoleFormats.RED))
             end
         end
         if key == "i" then
             INVINCIBILITY = not INVINCIBILITY
             if INVINCIBILITY then
                 Assets.playSound("sparkle_glock")
+                Debug.LOGGER:infoNotify("Invincibility: " .. FormatString("ON", ConsoleFormats.GREEN))
             else
                 Assets.playSound("bump")
+                Debug.LOGGER:infoNotify("Invincibility: " .. FormatString("OFF", ConsoleFormats.RED))
             end
         end
     end
@@ -1109,6 +1114,10 @@ function World:loadMap(...)
         end
     end
 
+    for _, battle_border in ipairs(self.map.battle_borders) do
+        battle_border.alpha = 0
+    end
+
     self.map:onEnter()
 
     if callback then
@@ -1398,6 +1407,7 @@ function World:update()
     for _, battle_border in ipairs(self.map.battle_borders) do
         battle_border.alpha = self.battle_alpha
     end
+
     if self.battle_fader then
         self.battle_fader:setColor(0, 0, 0, half_alpha)
     end

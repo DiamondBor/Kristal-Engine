@@ -4,6 +4,9 @@ local Console, super = Class(Object)
 
 function Console:init()
     super.init(self, 0, 0)
+
+    self.logger = Logger("Console", ConsoleFormats.YELLOW)
+
     self.layer = 10000000 - 1
 
     self.height = 12
@@ -17,8 +20,8 @@ function Console:init()
 
     self.read_offset = 0
 
-    self:push("Welcome to [color:cyan]KRISTAL[color:reset]! This is the debug console.")
-    self:push("You can enter Lua here to be ran! Use [color:gray]help()[color:reset] to open the help menu.")
+    self:push({"Welcome to ", { 0.5, 1, 1, 1 }, "KRISTAL", COLORS.white, "! This is the debug console."})
+    self:push({"You can enter Lua here to be ran! Use ", COLORS.ltgray, "help()", COLORS.white, " to open the help menu."})
     self:push("")
 
     self.command_history = {}
@@ -32,6 +35,10 @@ function Console:init()
     self:close()
 
     self.env = self:createEnv()
+
+    Logging.registerListener(ConsoleOutputListener())
+
+    self.announcements = {}
 end
 
 function Console:update()
@@ -45,6 +52,18 @@ function Console:update()
         self.read_offset = self.read_offset - delta
         self.read_offset = math.max(self.read_offset, -#self.history + self.height)
         self.read_offset = math.min(self.read_offset, 0)
+    end
+
+    for i = #self.announcements, 1, -1 do
+        local announcement = self.announcements[i]
+        announcement.time = announcement.time + DT
+
+        if announcement.time > 5 then
+            announcement.alpha = announcement.alpha - (DT * 2)
+            if announcement.alpha < 0 then
+                table.remove(self.announcements, i)
+            end
+        end
     end
 end
 
@@ -69,24 +88,28 @@ function Console:createEnv()
                 print_string = print_string .. "    "
             end
         end
-        self:log(print_string)
+        self.logger:debug(print_string)
     end
 
     function env.help()
-        self:push("[color:cyan]KRISTAL[color:reset] help menu:")
-        self:push("[color:yellow]Commands:")
-        self:push("clear() [color:gray]- Clears the console.")
-        self:push("stack() [color:gray]- Shows the stack traceback.")
-        self:push("move([color:yellow]int[color:reset]) [color:gray]- Move the cursor [color:yellow]int[color:gray] amount of lines.")
-        self:push("moveTo([color:yellow]int[color:reset]) [color:gray]- Move the cursor to line [color:yellow]int[color:gray].")
-        self:push("resetPos() [color:gray]- Move the cursor to the last line.")
-        self:push("giveItem([color:yellow]str[color:reset]) [color:gray]- Attempts to give item with ID [color:yellow]str[color:gray].")
-        self:push("")
-        self:push("[color:yellow]Controls:")
-        self:push("Arrow keys / scroll wheel [color:gray]- Move cursor.")
-        self:push("Up/Down [color:gray]- Move through command history.")
-        self:push("Ctrl + Up/Down [color:gray]- Scroll the console.")
-        self:push("Shift + Enter [color:gray]- New line.")
+        local yellow = { 1, 1, 0.5, 1 }
+        local gray = COLORS.ltgray
+        local white = COLORS.white
+
+        self:push({ { 0.5, 1, 1, 1 }, "KRISTAL", white, " help menu:"})
+        self:push({ yellow, "Commands:"})
+        self:push({"clear()", gray, " - Clears the console."})
+        self:push({"stack()", gray, " - Shows the stack traceback."})
+        self:push({"move(", yellow, "int", white, ")", gray, " - Move the cursor ", yellow, "int", gray, " amount of lines."})
+        self:push({"moveTo(", yellow, "int", white, ")", gray, " - Move the cursor to line ", yellow, "int", gray, "."})
+        self:push({"resetPos()", gray, " - Move the cursor to the last line."})
+        self:push({"giveItem(", yellow, "str", white, ")", gray, " - Attempts to give item with ID ", yellow, "str", gray, "."})
+        self:push({""})
+        self:push({yellow, "Controls:"})
+        self:push({"Arrow keys / scroll wheel", gray, " - Move cursor."})
+        self:push({"Up/Down", gray, " - Move through command history."})
+        self:push({"Ctrl + Up/Down", gray, " - Scroll the console."})
+        self:push({"Shift + Enter", gray, " - New line."})
     end
 
     function env.clear()
@@ -94,7 +117,7 @@ function Console:createEnv()
     end
 
     function env.stack()
-        self:warn(debug.traceback())
+        self.logger:warn(debug.traceback())
     end
 
     function env.move(amt)
@@ -112,9 +135,9 @@ function Console:createEnv()
     function env.giveItem(str)
         local success, result_text = Game.inventory:tryGiveItem(str)
         if success then
-            self:log("Item has been added")
+            self.logger:infoNotify("Item has been added")
         else
-            self:warn("Unable to add item (inventory full?)")
+            self.logger:warnNotify("Unable to add item (inventory full?)")
         end
     end
 
@@ -194,10 +217,13 @@ function Console:close()
     TextInput.endInput()
 end
 
-function Console:print(text, x, y, align)
+function Console:print(text, x, y, align, alpha)
     if text == nil then
         return
     end
+
+    alpha = alpha or 1
+
     align = align or 'left'
 
     local x_offset = 0
@@ -212,7 +238,9 @@ function Console:print(text, x, y, align)
     end
 
     for _, line in ipairs(text) do
-        Draw.setColor(self.color)
+        local r, g, b, a = unpack(ColorUtils.ensureAlpha(self.color))
+        Draw.setColor(r, g, b, a * alpha)
+
         if type(line) == "table" then
             self.color = line
         else
@@ -246,8 +274,40 @@ function Console:printOutlined(text, x, y )
 end
 
 function Console:draw()
-    if not self.is_open then return end
+    if self.is_open then
+        self:drawOpen()
+    elseif Kristal.isDevMode() then
+        self:drawOverlay()
+    end
+end
 
+function Console:drawOverlay()
+    local line_height = 18
+    love.graphics.setFont(self.font)
+
+    local max_lines = 12
+    local start_index = math.max(1, #self.announcements - max_lines + 1)
+
+    local max_alpha = 0
+    for i = start_index, #self.announcements do
+        local announcement = self.announcements[i]
+        max_alpha = math.max(max_alpha, announcement.alpha)
+    end
+
+    local max_bg_lines = math.min(max_lines, #self.announcements - start_index + 1)
+
+    love.graphics.setColor(0, 0, 0, 0.4 * max_alpha)
+    love.graphics.rectangle("fill", 0, 0, SCREEN_WIDTH / 2, line_height * max_bg_lines)
+
+    love.graphics.setColor(1, 1, 1, 1)
+
+    for i = start_index, #self.announcements do
+        local announcement = self.announcements[i]
+        self:print(announcement.content, 8, (i - start_index) * line_height, "left", announcement.alpha)
+    end
+end
+
+function Console:drawOpen()
     local line_height = 18
     love.graphics.setFont(self.font)
 
@@ -271,11 +331,12 @@ function Console:draw()
     end
 
     for line = #self.history - self.height, #self.history do
+        self.color = { 1, 1, 1, 1 }
         self:print(self.history[line + self.read_offset] or { COLORS.gray, "~" }, 8, y_offset * line_height)
         y_offset = y_offset + 1
     end
 
-    self.color = {1, 1, 1, 1}
+    self.color = { 1, 1, 1, 1 }
     self:print({("Line %d of %d"):format(# self.history + self.read_offset, #self.history)}, 8, y_offset * line_height, 'right')
     --y_offset = y_offset + 1
 
@@ -320,85 +381,362 @@ function Console:draw()
     super.draw(self)
 end
 
-function Console:push(str)
-    if str == nil then return end
+-- begin mini text engine
 
-    local lines = StringUtils.split(str, "\n", false)
+--- An internal class for keeping track of the state of text wrapping in the console.
+---@class ConsoleTextState
+---@field lines table The lines of text that have been wrapped so far
+---@field line table The current line of text being built
+---@field width number The width of the current line
+---@field max_width number The maximum width of any line so far
+---@field color table? The current color being used for text
+---@field pending_space string The whitespace that has been seen but not yet added to the current line
+---@field wrap_limit number The maximum width of a line before wrapping
+---@field font love.Font The font being used
 
-    local color = {}
-    for i, line in ipairs(lines) do
-        local text = { color }
-        local current = ""
-        local in_modifier = false
-        local modifier_text = ""
-        local disable_modifiers = false
 
-        ---@diagnostic disable-next-line: undefined-field
-        for char in line:gmatch(utf8.charpattern) do
-            if char == "[" and (not disable_modifiers) then
-                table.insert(text, current)
-                current = ""
-                in_modifier = true
-            elseif char == "]" and in_modifier then
-                current = ""
-                in_modifier = false
-                local modifier = StringUtils.split(modifier_text, ":", false)
-                if modifier[1] == "color" then
-                    color = { 1, 1, 1, 1 }
-                    if modifier[2] then
-                        if StringUtils.startsWith(modifier[2], "#") then
-                            color = ColorUtils.hexToRGB(modifier[2])
-                        elseif modifier[2] == "cyan" then
-                            color = { 0.5, 1, 1, 1 }
-                        elseif modifier[2] == "white" then
-                            color = { 1, 1, 1, 1 }
-                        elseif modifier[2] == "yellow" then
-                            color = { 1, 1, 0.5, 1 }
-                        elseif modifier[2] == "red" then
-                            color = { 1, 0.5, 0.5, 1 }
-                        elseif modifier[2] == "gray" then
-                            color = { 0.8, 0.8, 0.8, 1 }
-                        end
-                    end
+---@param state ConsoleTextState
+local function finish_line(state)
+    state.max_width = math.max(state.max_width, state.width)
+    table.insert(state.lines, state.line)
 
-                    table.insert(text, color)
-                elseif modifier[1] == "nomods" then
-                    disable_modifiers = true
-                else
-                    modifier_text = "[" .. modifier_text .. "]"
-                    table.insert(text, modifier_text)
-                end
-                modifier_text = ""
-            elseif in_modifier then
-                modifier_text = modifier_text .. char
-            else
-                current = current .. char
+    state.line = {}
+
+    if state.color then
+        table.insert(state.line, state.color)
+    end
+
+    state.width = 0
+    state.pending_space = ""
+end
+
+---@param state ConsoleTextState
+---@param text string
+local function add_piece(state, text)
+    if text == "" then
+        return
+    end
+
+    table.insert(state.line, text)
+    state.width = state.width + state.font:getWidth(text)
+end
+
+---@param state ConsoleTextState
+---@param word string
+local function hard_wrap(state, word)
+    local remaining = word
+
+    while remaining ~= "" do
+        local available = state.wrap_limit - state.width
+
+        if available <= 0 then
+            finish_line(state)
+            available = state.wrap_limit
+        end
+
+        local piece_width = 0
+        local last_valid_byte = 0
+
+        for byte_start, codepoint in utf8.codes(remaining) do
+            local character = utf8.char(codepoint)
+            local character_width = state.font:getWidth(character)
+
+            if piece_width + character_width > available then
+                break
+            end
+
+            piece_width = piece_width + character_width
+            last_valid_byte = byte_start + #character - 1
+        end
+
+        -- okay so this character is wider than the available space
+        if last_valid_byte == 0 then
+            local next_char_boundary = utf8.offset(remaining, 2) or (#remaining + 1)
+            local character = remaining:sub(1, next_char_boundary - 1)
+
+            add_piece(state, character)
+            remaining = remaining:sub(next_char_boundary)
+
+            if remaining ~= "" then
+                finish_line(state)
+            end
+        else
+            local piece = remaining:sub(1, last_valid_byte)
+            add_piece(state, piece)
+            remaining = remaining:sub(last_valid_byte + 1)
+
+            if remaining ~= "" then
+                finish_line(state)
             end
         end
-
-        table.insert(text, current)
-
-        if i == #lines then
-            table.insert(text, { 1, 1, 1, 1 })
-        end
-
-        table.insert(self.history, text)
     end
 end
 
+---@param state ConsoleTextState
+---@param word string
+local function add_word(state, word)
+    if word == "" then
+        return
+    end
+
+    local space_width = state.font:getWidth(state.pending_space)
+    local word_width = state.font:getWidth(word)
+
+    -- word fits on current line
+    if state.width + space_width + word_width <= state.wrap_limit then
+        add_piece(state, state.pending_space)
+
+        state.pending_space = ""
+
+        add_piece(state, word)
+        return
+    end
+
+    -- word doesnt fit on this line, but it will on a new line
+    if word_width <= state.wrap_limit then
+        state.pending_space = ""
+        finish_line(state)
+        add_piece(state, word)
+        return
+    end
+
+    -- word is too large, so hard-wrap
+    state.pending_space = ""
+
+    if state.width > 0 then
+        finish_line(state)
+    end
+
+    hard_wrap(state, word)
+end
+
+--- add text to the console, handling whitespace and wrapping
+---@param state ConsoleTextState
+---@param text string
+---@param preserve_leading_space boolean
+local function add_text(state, text, preserve_leading_space)
+    local pos = 1
+
+    while pos <= #text do
+        local whitespace_start, whitespace_end = text:find("%s+", pos)
+
+        if whitespace_start == pos then
+            local whitespace = text:sub(whitespace_start, whitespace_end)
+
+            if preserve_leading_space and state.width == 0 then
+                -- whitespace follows an explicit newline, so keep it
+                add_piece(state, whitespace)
+            else
+                -- dont commit whitespace until we know the next word fits on this line
+                state.pending_space = state.pending_space .. whitespace
+            end
+
+            pos = whitespace_end + 1
+        else
+            local word_end = text:find("%s", pos) or (#text + 1)
+            local word = text:sub(pos, word_end - 1)
+
+            add_word(state, word)
+
+            preserve_leading_space = false
+            pos = word_end
+        end
+    end
+end
+
+--- responsible for adding text to the console, handling newlines and wrapping
+---@param state ConsoleTextState
+---@param text string
+local function add_formatted_text(state, text)
+    local start = 1
+    local after_newline = false
+
+    while true do
+        local newline = text:find("\n", start, true)
+
+        if not newline then
+            add_text(state, text:sub(start), after_newline)
+            break
+        end
+
+        add_text(state, text:sub(start, newline - 1), after_newline)
+
+        -- explicit newline, so preserve whitespace
+        state.pending_space = ""
+        finish_line(state)
+
+        after_newline = true
+        start = newline + 1
+    end
+end
+
+---
+--- Like LÖVE's `Font:getWrap`, but keeps formatting
+---
+---@param tbl table The text to wrap, as a table of strings and formatting tables.
+---@param wrap_limit number The width to wrap at.
+---@return number width The width of the wrapped text
+---@return table lines The wrapped text, as a table of lines, each line being a table of strings and formatting tables.
+function Console:getWrappedLines(tbl, wrap_limit)
+    -- okay begin the horrors
+    -- this is a mini text wrapping engine
+
+    ---@type ConsoleTextState
+    local state = {
+        lines = {},
+        line = {},
+        width = 0,
+        max_width = 0,
+        color = nil,
+        pending_space = "",
+        wrap_limit = wrap_limit,
+        font = self.font
+    }
+
+    for _, part in ipairs(tbl) do
+        if type(part) == "table" then
+            state.color = part
+            table.insert(state.line, part)
+        else
+            add_formatted_text(state, part)
+        end
+    end
+
+    -- whitespace at the end of the input should be kept
+    if state.pending_space ~= "" then
+        add_piece(state, state.pending_space)
+    end
+
+    state.max_width = math.max(state.max_width, state.width)
+    table.insert(state.lines, state.line)
+
+    return state.max_width, state.lines
+end
+
+function Console:push(str)
+    if str == nil then
+        return
+    end
+
+    if type(str) == "table" then
+        -- This is a fancy formatting table, so let's wrap it
+
+        local _, wrappedtext = self:getWrappedLines(str, SCREEN_WIDTH - 16)
+        for _, line in ipairs(wrappedtext) do
+            table.insert(self.history, line)
+        end
+
+        return
+    end
+
+    local _, lines = self.font:getWrap(str, SCREEN_WIDTH - 16)
+
+    for _, line in ipairs(lines) do
+        table.insert(self.history, { line })
+    end
+end
+
+function Console:announce(str)
+    if str == nil then
+        return
+    end
+
+    if type(str) == "table" then
+        -- This is a fancy formatting table, so let's wrap it
+
+        local _, wrappedtext = self:getWrappedLines(str, SCREEN_WIDTH / 2 - 8)
+        for _, line in ipairs(wrappedtext) do
+            table.insert(self.announcements, { content = line, time = 0, alpha = 1 })
+        end
+
+        return
+    end
+
+    local _, lines = self.font:getWrap(str, SCREEN_WIDTH / 2 - 8)
+
+    for _, line in ipairs(lines) do
+        table.insert(self.announcements, { content = { line }, time = 0, alpha = 1 })
+    end
+end
+
+function Console:parseLegacyFormatting(str)
+    local color = {}
+    local text = { color }
+    local current = ""
+    local in_modifier = false
+    local modifier_text = ""
+    local disable_modifiers = false
+
+    ---@diagnostic disable-next-line: undefined-field
+    for char in str:gmatch(utf8.charpattern) do
+        if char == "[" and (not disable_modifiers) then
+            table.insert(text, current)
+            current = ""
+            in_modifier = true
+        elseif char == "]" and in_modifier then
+            current = ""
+            in_modifier = false
+            local modifier = StringUtils.split(modifier_text, ":", false)
+            if modifier[1] == "color" then
+                color = { 1, 1, 1, 1 }
+                if modifier[2] then
+                    if StringUtils.startsWith(modifier[2], "#") then
+                        color = ColorUtils.hexToRGB(modifier[2])
+                    elseif modifier[2] == "cyan" then
+                        color = { 0.5, 1, 1, 1 }
+                    elseif modifier[2] == "white" then
+                        color = { 1, 1, 1, 1 }
+                    elseif modifier[2] == "yellow" then
+                        color = { 1, 1, 0.5, 1 }
+                    elseif modifier[2] == "red" then
+                        color = { 1, 0.5, 0.5, 1 }
+                    elseif modifier[2] == "gray" then
+                        color = { 0.8, 0.8, 0.8, 1 }
+                    end
+                end
+
+                table.insert(text, color)
+            elseif modifier[1] == "nomods" then
+                disable_modifiers = true
+            else
+                modifier_text = "[" .. modifier_text .. "]"
+                table.insert(text, modifier_text)
+            end
+            modifier_text = ""
+        elseif in_modifier then
+            modifier_text = modifier_text .. char
+        else
+            current = current .. char
+        end
+    end
+
+    table.insert(text, current)
+
+    return text
+end
+
+---@deprecated
 function Console:log(str)
+    Kristal.markDeprecated(2, "Kristal.Console:log", "method", "replaced", "Logging.info")
+
     print("[CONSOLE] " .. tostring(str))
-    self:push(str)
+    self:push(self:parseLegacyFormatting(tostring(str)))
 end
 
+---@deprecated
 function Console:warn(str)
+    Kristal.markDeprecated(2, "Kristal.Console:warn", "method", "replaced", "Logging.warn")
+
     print("[WARNING] " .. tostring(str))
-    self:push("[color:yellow][WARNING] " .. tostring(str))
+    self:push(self:parseLegacyFormatting("[color:yellow][WARNING] " .. tostring(str)))
 end
 
+---@deprecated
 function Console:error(str)
+    Kristal.markDeprecated(2, "Kristal.Console:error", "method", "replaced", "Logging.error")
+
     print("[ERROR] " .. tostring(str))
-    self:push("[color:red][ERROR] " .. tostring(str))
+    self:push(self:parseLegacyFormatting("[color:red][ERROR] " .. tostring(str)))
 end
 
 function Console:stripError(str)
@@ -411,35 +749,34 @@ function Console:run(str)
     end
     self.history_index = #self.command_history + 1
     local run_string = ""
-    local history_string = ""
     for i, line in ipairs(str) do
-        local prefix = "[color:gray][nomods]> "
+        local prefix = "> "
 
         if #str > 1 then
             if i == 1 then
-                prefix = "[color:gray][nomods]┌ "
+                prefix = "┌ "
             elseif i == #str then
-                prefix = "[color:gray][nomods]└ "
+                prefix = "└ "
             else
-                prefix = "[color:gray][nomods]│ "
+                prefix = "│ "
             end
         end
 
         if i == #str then
-            history_string = history_string .. prefix .. line
             run_string     = run_string .. line
         else
-            history_string = history_string .. prefix .. line .. "\n"
             run_string     = run_string .. line .. "\n"
         end
+
+        self:push({ COLORS.ltgray, prefix, line })
     end
-    self:push(history_string)
+
     if StringUtils.startsWith(run_string, "=") then
         run_string = "print(" .. StringUtils.sub(run_string, 2) .. ")"
     end
     local status, err = pcall(function() self:unsafeRun(run_string) end)
     if (not status) and err then
-        self:error(self:stripError(err))
+        self.logger:error(self:stripError(err))
         print(err)
     end
 end
@@ -450,9 +787,12 @@ function Console:unsafeRun(str)
         rawset(self.env, "selected", Kristal.DebugSystem.object)
         rawset(self.env, "_", Kristal.DebugSystem.object)
         setfenv(chunk, self.env)
-        self:push(chunk())
+        local ret = chunk()
+        if ret ~= nil then
+            self.logger:debug()
+        end
     else
-        self:error(self:stripError(err))
+        self.logger:error(self:stripError(err))
     end
 end
 

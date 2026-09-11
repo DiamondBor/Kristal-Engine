@@ -28,18 +28,16 @@ function MainMenuOptions:init(menu)
 
     self.state_manager = StateManager("MENU", self, true)
     self.state_manager:addState("MENU", { enter = self.onEnterMenu, keypressed = self.onKeyPressedMenu })
-    self.state_manager:addState("VOLUME",
-                                {
-                                    enter = self.onEnterSubOption,
-                                    keypressed = self.onKeyPressedVolume,
-                                    update = self.updateVolume
-                                })
+    self.state_manager:addState("VOLUME", {
+        enter = self.onEnterSubOption,
+        keypressed = self.onKeyPressedVolume,
+        update = self.updateVolume
+    })
     self.state_manager:addState("BORDER", { enter = self.onEnterSubOption, keypressed = self.onKeyPressedBorder })
     self.state_manager:addState("FPS", { enter = self.onEnterSubOption, keypressed = self.onKeyPressedFPS })
     self.state_manager:addState("WINDOWSCALE", {
         enter = self.onEnterSubOption,
-        keypressed = self
-            .onKeyPressedWindowScale
+        keypressed = self.onKeyPressedWindowScale
     })
 
     self.options = {}
@@ -226,8 +224,6 @@ function MainMenuOptions:onKeyPressedMenu(key, is_repeat)
     if Input.isCancel(key) then
         Assets.stopAndPlaySound("ui_move")
 
-        Kristal.saveConfig()
-
         self.menu:setState("TITLE")
         self.menu.title_screen:selectOption("options")
         return
@@ -279,8 +275,6 @@ function MainMenuOptions:onKeyPressedMenu(key, is_repeat)
 
         if self.selected_option == max_option then
             -- "Back" button
-            Kristal.saveConfig()
-
             self.menu:setState("TITLE")
             self.menu.title_screen:selectOption("options")
         else
@@ -304,6 +298,8 @@ function MainMenuOptions:onKeyPressedBorder(key, is_repeat)
     if Input.isCancel(key) or Input.isConfirm(key) then
         Assets.stopAndPlaySound("ui_select")
         self:setState("MENU")
+
+        Kristal.saveConfig()
     end
 
     local types = Kristal.getBorderTypes()
@@ -345,6 +341,8 @@ function MainMenuOptions:onKeyPressedFPS(key, is_repeat)
 
         Assets.stopAndPlaySound("ui_select")
         self:setState("MENU")
+
+        Kristal.saveConfig()
     end
 
     if Input.is("left", key) then
@@ -390,6 +388,8 @@ function MainMenuOptions:onKeyPressedWindowScale(key, is_repeat)
     if Input.isCancel(key) or Input.isConfirm(key) then
         Assets.stopAndPlaySound("ui_select")
         self:setState("MENU")
+
+        Kristal.saveConfig()
     end
 
     local old_scale = Kristal.getWindowScale()
@@ -532,6 +532,7 @@ function MainMenuOptions:registerConfigOption(page, name, config, callback)
             if callback then
                 callback(Kristal.Config[config])
             end
+            Kristal.saveConfig()
         end
     )
 end
@@ -557,6 +558,10 @@ function MainMenuOptions:initializeOptions()
     self:registerOptionsPage("graphics", "GRAPHICS")
     self:registerOptionsPage("engine", "ENGINE")
     self:registerOptionsPage("loading", "LOADING")
+
+    if not RELEASE_MODE then
+        self:registerOptionsPage("developer", "DEVELOPER")
+    end
 
     ---------------------
     -- General Options
@@ -624,6 +629,7 @@ function MainMenuOptions:initializeOptions()
                     end
                     Kristal.resetWindow()
                 end
+                Kristal.saveConfig()
             end
         )
     end
@@ -674,7 +680,6 @@ function MainMenuOptions:initializeOptions()
     ---------------------
 
     self:registerConfigOption("engine", "Skip Intro", "skipIntro")
-    self:registerConfigOption("engine", "Display FPS", "showFPS")
 
     self:registerOption(
         "engine",
@@ -688,7 +693,6 @@ function MainMenuOptions:initializeOptions()
     )
 
     self:registerConfigOption("engine", "Skip Name Entry", "skipNameEntry")
-    self:registerConfigOption("engine", "Verbose Loader", "verboseLoader")
     self:registerConfigOption("engine", "Use System Mouse", "systemCursor", function() Kristal.updateCursor() end)
     self:registerConfigOption("engine", "Always Show Mouse", "alwaysShowCursor", function() Kristal.updateCursor() end)
     self:registerConfigOption("engine", "Instant Quit", "instantQuit")
@@ -712,6 +716,22 @@ function MainMenuOptions:initializeOptions()
     )
     
     self:registerConfigOption("loading", "Loading Screen", "showLoadingScreen")
+    
+    ---------------------
+    -- Developer Options
+    ---------------------
+
+    if not RELEASE_MODE then
+        self:registerConfigOption("developer", "Display FPS", "showFPS")
+        self:registerConfigOption("developer", "Verbose Loader", "verboseLoader")
+        self:registerOption("developer", "Logger Popups", function()
+                return Kristal.Config["loggerOnlyWarns"] and "WARNS" or "SHOW ALL"
+            end, function()
+                Kristal.Config["loggerOnlyWarns"] = not Kristal.Config["loggerOnlyWarns"]
+                Kristal.saveConfig()
+            end
+        )
+    end
 end
 
 return MainMenuOptions

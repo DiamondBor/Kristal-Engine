@@ -80,7 +80,7 @@ function Kristal.verifySoundSystem()
     local source = love.audio.newSource("assets/music/none.ogg", "static")
     local success = source:play()
     if not success then
-        print("Audio has been detected as unavailable, disabling sound for the rest of the session")
+        Logging.warnNotify("Audio has been detected as unavailable, disabling sound for the rest of the session")
         SOUND_DISABLED = true
     end
 end
@@ -108,8 +108,18 @@ function love.load(args)
         io.stdout:setvbuf("no")
     end
 
+    Logging.init(Kristal.Args["ansi-colors"])
+    Logging.registerDefaultListeners()
+    Logging.createSystemLogger()
+
+    Debug.init()
+
+    Hotswapper.init()
+
     -- load the version
     Kristal.Version = SemVer(love.filesystem.read("VERSION"))
+
+    Logging.info("Kristal v" .. tostring(Kristal.Version))
 
     -- load the settings.json
     Kristal.Config = Kristal.loadConfig()
@@ -539,15 +549,18 @@ function Kristal.onKeyPressed(key, is_repeat)
             Input.resetBinds()
             Input.saveBinds()
             Assets.playSound("impact")
+            Logging.warnNotify("Input binds reset to defaults")
             return
         end
 
         if Mod ~= nil then
             if Input.ctrl() and Input.shift() and Input.alt() and key == "m" and not is_repeat then -- Enable developer mode for the current project
-                if not DEBUG_OVERRIDE then
+                if (not DEBUG_OVERRIDE) and (not Mod.info.dev) then
                     DEBUG_OVERRIDE = true
                     Assets.playSound("bump")
                     Assets.playSound("him_quick")
+
+                    Logging.infoNotify("Developer mode enabled for this session")
                 end
                 return
             end
@@ -594,7 +607,7 @@ function Kristal.onKeyPressed(key, is_repeat)
             elseif key == "f6" then
                 DEBUG_RENDER = not DEBUG_RENDER
             elseif key == "f8" then
-                print("Hotswapping files...\nNOTE: Might be unstable. If anything goes wrong, it's not our fault :P")
+                Hotswapper.LOGGER:infoNotify("Hotswapping files...\nNOTE: Might be unstable. If anything goes wrong, it's not our fault :P")
                 Hotswapper.scan()
             elseif key == "r" and Input.ctrl() and (not console_open) then
                 -- CTRL+R to reload
@@ -669,7 +682,7 @@ function Kristal.onWheelMoved(x, y)
 end
 
 local function error_printer(msg, layer)
-    print((debug.traceback("Error: " .. tostring(msg), 1 + (layer or 1)):gsub("\n[^\n]+$", "")))
+    Logging.error((debug.traceback("Error: " .. tostring(msg), 1 + (layer or 1)):gsub("\n[^\n]+$", "")))
 end
 
 --- Kristal alternative to the default love.errorhandler. \
@@ -741,7 +754,7 @@ function Kristal.errorHandler(msg, trace_level)
     if not critical and not trace then
         error_printer(msg, trace_level)
     elseif trace then
-        print("Error: " .. msg .. "\n" .. trace)
+        Logging.error("Error: " .. msg .. "\n" .. trace)
     end
 
     if not love.window or not love.graphics or not love.event then
@@ -822,7 +835,7 @@ function Kristal.errorHandler(msg, trace_level)
     local w = 0
     local h = 18
     if Mod then
-        mod_string = "Mod: " .. Mod.info.id .. " " .. (Mod.info.version or "v?.?.?")
+        mod_string = "Project: " .. Mod.info.id .. " " .. (Mod.info.version or "v?.?.?")
         if TableUtils.getKeyCount(Mod.libs) > 0 then
             lib_string = "Libraries:"
             for _, lib in Kristal.iterLibraries() do
@@ -955,7 +968,7 @@ function Kristal.errorHandler(msg, trace_level)
             love.graphics.print("Press ESC to restart the game", 8, window_height - (critical and 20 or 40))
         else
             Draw.setColor(1, 1, 1, 1)
-            love.graphics.print("Press ESC to return to mod menu", 8, window_height - (critical and 20 or 40))
+            love.graphics.print("Press ESC to return to menu", 8, window_height - (critical and 20 or 40))
         end
         if not critical then
             Draw.setColor(copy_color)
@@ -1234,6 +1247,7 @@ function Kristal.clearModState()
     Mod = nil
 
     Kristal.resetDevMode()
+    Debug.reset()
 
     -- Close the console or debug menu if open
     -- (We don't care much if someone "smuggles" them out of the Game state, but we'll try to close them if we can)
@@ -1385,6 +1399,7 @@ function Kristal.quickReload(mode)
                 if Kristal.preInitMod(mod_id) then
                     Kristal.setDesiredWindowTitleAndIcon()
                     Kristal.setState("Game", save_id)
+                    Debug.reset()
                     Kristal.resetDevMode()
                     if Kristal.isDevMode() then
                         DEBUG_OVERRIDE = dev_debug_override
@@ -1523,6 +1538,7 @@ function Kristal.loadMod(id, save_id, save_name, after)
             Kristal.setDesiredWindowTitleAndIcon()
             Kristal.setState("Game", save_id, save_name)
             Kristal.resetDevMode()
+            Debug.reset()
         end
     end)
 
@@ -1890,6 +1906,7 @@ function Kristal.getDefaultConfig()
         projectLoadingMode = LoadingMode.SEMI_LAZY,
         showLoadingScreen = true,
         assetLoaderThreads = 0,
+        loggerOnlyWarns = false
     }
 
     return config
@@ -1898,26 +1915,25 @@ end
 --- Called internally. Loads the saved user config, with default values.
 ---@return table config The user config.
 function Kristal.loadConfig()
+    Logging.infoNotify("Loading settings from " .. FormatString("settings.json", ConsoleFormats.GRAY))
     local config = Kristal.getDefaultConfig()
 
     if love.filesystem.getInfo("settings.json") then
         local success, message = pcall(JSON.decode, love.filesystem.read("settings.json"))
         if not success then
-            print("Error loading settings.json: " .. tostring(message))
-            print("Using default config.")
+            Logging.errorNotify("Error loading settings.json: " .. tostring(message) .. "\nUsing default config.")
             return config
         end
 
         local config_type = type(message)
         if config_type ~= "table" then
-            print("Error loading settings.json: Expected table, got " .. config_type)
-            print("Using default config.")
+            Logging.errorNotify("Error loading settings.json: Expected table, got " .. config_type .. "\nUsing default config.")
             return config
         end
 
         TableUtils.merge(config, message)
     else
-        print("No settings.json found, using default config.")
+        Logging.infoNotify("No settings.json found, using default config.")
     end
 
     return config
@@ -1925,7 +1941,12 @@ end
 
 --- Saves the current config table to the `settings.json`.
 function Kristal.saveConfig()
-    love.filesystem.write("settings.json", JSON.encode(Kristal.Config))
+    Logging.infoNotify("Saving " .. FormatString("settings.json", ConsoleFormats.GRAY))
+    local success, message = love.filesystem.write("settings.json", JSON.encode(Kristal.Config))
+
+    if not success then
+        Logging.errorNotify("Error saving settings.json: " .. tostring(message))
+    end
 end
 
 --- Saves the game.
@@ -1933,11 +1954,16 @@ end
 ---@param data? table  The data to save to the file. (Defaults to the output of `Game:save()`)
 function Kristal.saveGame(id, data)
     id = id or Game.save_id
+    local path = "saves/" .. Mod.info.id .. "/file_" .. id .. ".json"
+
+    Logging.info(FormatString("Writing save file "):add(FormatString(tostring(id), ConsoleFormats.GREEN)):add(" to path "):add(FormatString(path, ConsoleFormats.GRAY)))
+
     data = data or Game:save()
     Game.save_id = id
     Game.quick_save = nil
+
     love.filesystem.createDirectory("saves/" .. Mod.info.id)
-    love.filesystem.write("saves/" .. Mod.info.id .. "/file_" .. id .. ".json", JSON.encode(data))
+    love.filesystem.write(path, JSON.encode(data))
 end
 
 --- Loads the game from a save file.
@@ -1946,10 +1972,14 @@ end
 function Kristal.loadGame(id, fade)
     id = id or Game.save_id
     local path = "saves/" .. Mod.info.id .. "/file_" .. id .. ".json"
+
+    Logging.info(FormatString("Loading save file "):add(FormatString(tostring(id), ConsoleFormats.GREEN)):add(" from path "):add(FormatString(path, ConsoleFormats.GRAY)))
+
     if love.filesystem.getInfo(path) then
         local data = JSON.decode(love.filesystem.read(path))
         Game:load(data, id, fade)
     else
+        Logging.info(FormatString("Save file "):add(FormatString(tostring(id), ConsoleFormats.GREEN)):add(" does not exist, starting new game."))
         Game:load(nil, id, fade)
     end
 end
@@ -2241,11 +2271,11 @@ function Kristal.markDeprecated(level, name, api_type, deprecation_type, new_nam
     end
     local info = debug.getinfo(level + 1, "Sl")
     if not info then
-        print("Failed to find debug info for deprecation warning: " .. deprecation_message)
+        Logging.warnNotify("Failed to find debug info for deprecation warning: " .. deprecation_message)
         return
     end
     local source_line = string.format("%s:%s", info.short_src, info.currentline)
-    Kristal.Console:warn(string.format("Warning: %s: %s", source_line, deprecation_message))
+    Logging.warnNotify(string.format("%s: %s", source_line, deprecation_message))
 end
 
 --- Executes a `.lua` script inside the project folder.

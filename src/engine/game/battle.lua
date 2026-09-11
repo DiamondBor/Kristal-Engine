@@ -1495,7 +1495,7 @@ function Battle:processAction(action)
 
     else
         -- we don't know how to handle this...
-        Kristal.Console:warn("Unhandled battle action: " .. tostring(action.action))
+        Logging.warnNotify("Unhandled battle action: " .. tostring(action.action))
         return true
     end
 end
@@ -1697,10 +1697,7 @@ function Battle:powerAct(spell, battler, user, target)
     local user_battler = self:getPartyBattler(user)
     local user_index = self:getPartyIndex(user)
 
-    if user_battler == nil then
-        Kristal.Console:error("Invalid power act user: " .. tostring(user))
-        return
-    end
+    assert(battler ~= nil, "Invalid battler for powerAct: " .. tostring(battler))
 
     if type(spell) == "string" then
         spell = Registry.createSpell(spell)
@@ -2496,7 +2493,7 @@ function Battle:nextTurn()
     while not (self.party[self.current_selecting]:isActive()) do
         self.current_selecting = self.current_selecting + 1
         if self.current_selecting > #self.party then
-            Kristal.Console:warn("Nobody up! This shouldn't happen...")
+            Logging.warnNotify("Nobody up! This shouldn't happen...")
             self.current_selecting = 1
             break
         end
@@ -3117,7 +3114,6 @@ function Battle:drawDebug()
     self:debugPrintOutline("CTRL+Y - win battle", 4, 96)
     self:debugPrintOutline("CTRL+M - pause/resume music", 4, 112)
     self:debugPrintOutline("CTRL+F - end current wave", 4, 128)
-    self:debugPrintOutline("CTRL+B - kill party", 4, 144)
     self:debugPrintOutline("CTRL+K - fill tension", 4, 160)
     self:debugPrintOutline("CTRL+N - toggle noclip", 4, 176)
     self:debugPrintOutline("CTRL+I - toggle invincibility", 4, 192)
@@ -3327,25 +3323,27 @@ function Battle:onKeyPressed(key)
             for _, party in ipairs(self.party) do
                 party:heal(math.huge)
             end
+            Debug.LOGGER:infoNotify(FormatString("Healed party", ConsoleFormats.GREEN))
         end
         if key == "y" then
             Input.clear(nil, true)
             self:setState("VICTORY")
+            Debug.LOGGER:infoNotify(FormatString("Ending battle", ConsoleFormats.YELLOW))
         end
         if key == "m" then
             if self.music then
                 if self.music:isPlaying() then
                     self.music:pause()
+                    Debug.LOGGER:infoNotify("Battle music: " .. FormatString("PAUSED", ConsoleFormats.YELLOW))
                 else
                     self.music:resume()
+                    Debug.LOGGER:infoNotify("Battle music: " .. FormatString("RESUMED", ConsoleFormats.GREEN))
                 end
             end
         end
         if self.state == "DEFENDING" and key == "f" then
             self:endWaves()
-        end
-        if key == "b" then
-            self:hurt(math.huge, true, "ALL")
+            Debug.LOGGER:infoNotify(FormatString("Ending waves", ConsoleFormats.YELLOW))
         end
         if key == "k" then
             Game:setTension(Game:getMaxTension())
@@ -3354,21 +3352,27 @@ function Battle:onKeyPressed(key)
             if self.tension_bar ~= nil then
                 self.tension_bar:flash()
             end
+
+            Debug.LOGGER:infoNotify("Tension: " .. FormatString("100%", ConsoleFormats.YELLOW))
         end
         if key == "n" then
             NOCLIP = not NOCLIP
             if NOCLIP then
                 Assets.playSound("petrify")
+                Debug.LOGGER:infoNotify("Noclip: " .. FormatString("ON", ConsoleFormats.GREEN))
             else
                 Assets.playSound("bump")
+                Debug.LOGGER:infoNotify("Noclip: " .. FormatString("OFF", ConsoleFormats.RED))
             end
         end
         if key == "i" then
             INVINCIBILITY = not INVINCIBILITY
             if INVINCIBILITY then
                 Assets.playSound("sparkle_glock")
+                Debug.LOGGER:infoNotify("Invincibility: " .. FormatString("ON", ConsoleFormats.GREEN))
             else
                 Assets.playSound("bump")
+                Debug.LOGGER:infoNotify("Invincibility: " .. FormatString("OFF", ConsoleFormats.RED))
             end
         end
     end
