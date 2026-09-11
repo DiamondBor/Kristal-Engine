@@ -47,7 +47,7 @@ end
 
 function AssetBucket:unload()
     self.generation = self.generation + 1
-    if self.synchronous_fault_stats.tasks > 0 then
+    if self.synchronous_fault_stats.tasks > 0 and Kristal.Config["verboseLoader"] then
         print(string.format(
             "[AssetLoader] %s: synchronous fault latency %.3fs/%d tasks, worst %s %.3fs",
             self.bucket_id,
@@ -323,14 +323,16 @@ function AssetBucket:finishIfReady()
             stats.worker_heap_kb = stats.worker_heap_kb + heap_kb
         end
         self.last_load_stats = stats
-        print(string.format("[AssetLoader] %s: %d assets in %.3fs (discovery %.3fs, pipeline %.3fs, decode CPU %.3fs/%d tasks on %d workers, worker heap %.1f MB, apply %.3fs, synchronous decode %.3fs/%d tasks, synchronous fault latency %.3fs)",
-            self.bucket_id, stats.assets_loaded, stats.total_time,
-            stats.discovery_time, stats.pipeline_time,
-            stats.worker_decode_time, stats.worker_tasks, stats.worker_count,
-            stats.worker_heap_kb / 1024,
-            stats.apply_time, stats.synchronous_decode_time, stats.synchronous_tasks,
-            stats.synchronous_fault_time
-        ))
+        if Kristal.Config["verboseLoader"] then
+            print(string.format("[AssetLoader] %s: %d assets in %.3fs (discovery %.3fs, pipeline %.3fs, decode CPU %.3fs/%d tasks on %d workers, worker heap %.1f MB, apply %.3fs, synchronous decode %.3fs/%d tasks, synchronous fault latency %.3fs)",
+                self.bucket_id, stats.assets_loaded, stats.total_time,
+                stats.discovery_time, stats.pipeline_time,
+                stats.worker_decode_time, stats.worker_tasks, stats.worker_count,
+                stats.worker_heap_kb / 1024,
+                stats.apply_time, stats.synchronous_decode_time, stats.synchronous_tasks,
+                stats.synchronous_fault_time
+            ))
+        end
     end
     self.load_stats = nil
     local callbacks = self.completion_callbacks
