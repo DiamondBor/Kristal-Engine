@@ -583,6 +583,7 @@ function MainMenuOptions:initializeOptions()
     end
     self:registerOption("general", "Keyboard Controls", nil, function() enterControls("keyboard") end)
     self:registerOption("general", "Gamepad Controls", nil, function() enterControls("gamepad") end)
+    self:registerOption("general", "Mobile Controls", nil, function() self.menu:pushState("MOBILECONTROLS") end)
 
     self:registerConfigOption("general", "Auto-Run", "autoRun")
 

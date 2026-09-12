@@ -308,6 +308,10 @@ function love.draw()
 
     Draw._clearUnusedCanvases()
 
+    if not TAKING_SCREENSHOT then
+        MobileControls.draw()
+    end
+
     local screenshot_size = MathUtils.lerp(20, 0, SCREENSHOT_DISPLAY)
     if screenshot_size > 0 and not TAKING_SCREENSHOT then
         local w = love.graphics.getWidth() / Kristal.getGameScale()
@@ -373,6 +377,8 @@ function love.update(dt)
     DT = dt
     DTMULT = dt * 30
     RUNTIME = RUNTIME + dt
+
+    MobileControls.update()
 
     local state = Kristal.getState()
     if state ~= nil and state.update then
@@ -488,6 +494,25 @@ function love.mousereleased(x, y, button, istouch, presses)
     end
     Input.onMouseReleased(x, y, button, istouch, presses)
     Kristal.callEvent(KRISTAL_EVENT.onMouseReleased, x, y, button, istouch, presses)
+end
+
+function love.touchpressed(id, win_x, win_y, win_dx, win_dy, pressure)
+    MobileControls.touchPressed(id, win_x, win_y)
+    local x, y = Input.getMousePosition(win_x, win_y)
+    Kristal.callEvent(KRISTAL_EVENT.onTouchPressed, id, x, y, pressure)
+end
+
+function love.touchmoved(id, win_x, win_y, win_dx, win_dy, pressure)
+    MobileControls.touchMoved(id, win_x, win_y)
+    local x, y = Input.getMousePosition(win_x, win_y)
+    local dx, dy = Input.getMousePosition(win_dx, win_dy, true)
+    Kristal.callEvent(KRISTAL_EVENT.onTouchMoved, id, x, y, dx, dy, pressure)
+end
+
+function love.touchreleased(id, win_x, win_y, win_dx, win_dy, pressure)
+    MobileControls.touchReleased(id)
+    local x, y = Input.getMousePosition(win_x, win_y)
+    Kristal.callEvent(KRISTAL_EVENT.onTouchReleased, id, x, y, pressure)
 end
 
 function love.keypressed(key, scancode, is_repeat)
@@ -1696,7 +1721,12 @@ end
 
 ---@return boolean forced Whether the game is forced to be in fullscreen mode (on mobile platforms and consoles).
 function Kristal.isForcedFullscreen()
-    return love.system.getOS() == "Android" or love.system.getOS() == "iOS" or Kristal.isConsole()
+    return Kristal.isMobile() or Kristal.isConsole()
+end
+
+---@return boolean mobile
+function Kristal.isMobile()
+    return love.system.getOS() == "Android" or love.system.getOS() == "iOS"
 end
 
 ---@return boolean console Whether Kristal is in console mode.
@@ -1899,6 +1929,10 @@ function Kristal.getDefaultConfig()
         borders = "off",
         leftStickDeadzone = 0.2,
         rightStickDeadzone = 0.2,
+        mobileSideDistance = 0.25,
+        mobileScale = 0.5,
+        mobileOpacity = 0.2222, -- accuracy: 1000000000000%
+        mobileButtonStyle = "official",
         defaultName = "",
         skipNameEntry = false,
         verboseLoader = false,

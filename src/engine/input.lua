@@ -115,6 +115,11 @@ Input.required_binds = {
     ["menu"] = true
 }
 
+Input.touch_bindings = {}
+for alias, _ in pairs(Input.required_binds) do
+    Input.touch_bindings[alias] = { "touch:" .. alias }
+end
+
 Input.key_groups = {
     ["shift"] = { "lshift", "rshift" },
     ["ctrl"]  = { "lctrl", "rctrl" },
@@ -201,6 +206,9 @@ function Input.getBoundKeys(key, gamepad)
             table.insert(bindings, bind)
         end
         for _, bind in ipairs(gamepad_bindings or {}) do
+            table.insert(bindings, bind)
+        end
+        for _, bind in ipairs(Input.touch_bindings[key] or {}) do
             table.insert(bindings, bind)
         end
         return bindings
@@ -805,7 +813,19 @@ function Input.hasGamepad()
     return Input.connected_gamepad ~= nil
 end
 
+---@param except? love.Joystick
+---@return love.Joystick?
+function Input.findGamepad(except)
+    for _, joystick in ipairs(love.joystick.getJoysticks()) do
+        if joystick ~= except and joystick:isGamepad() then
+            return joystick
+        end
+    end
+end
+
 function love.joystickadded(joystick)
+    if not joystick:isGamepad() then return end
+
     Input.connected_gamepad = joystick
     Input.active_gamepad = joystick
 end
@@ -815,7 +835,7 @@ function love.joystickremoved(joystick)
         Input.active_gamepad = nil
     end
     if Input.connected_gamepad == joystick then
-        Input.connected_gamepad = love.joystick.getJoysticks()[1]
+        Input.connected_gamepad = Input.findGamepad(joystick)
     end
 end
 
