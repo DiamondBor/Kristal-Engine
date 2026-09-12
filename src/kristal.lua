@@ -1,4 +1,7 @@
 local LoadingMode = require("src.engine.loading.LoadingMode")
+local FFI = require("ffi")
+FFI.cdef("int chmod(const char *path, int mode);")
+
 ---@class Kristal
 ---@field Console Console
 ---@field DebugSystem DebugSystem
@@ -127,6 +130,8 @@ function love.load(args)
     -- load the keybinds
     Input.loadBinds()
 
+    Kristal.openSaveDirectory()
+
     TextInput.init()
 
     -- Save the defaults so if we do setWindowTitle for a project we're able to revert it
@@ -246,6 +251,7 @@ function love.quit()
     end
 
     Kristal.saveConfig()
+    Kristal.openSaveDirectory()
     if Kristal.Loader.thread and Kristal.Loader.thread:isRunning() then
         Kristal.Loader.in_channel:push("stop")
     end
@@ -1722,6 +1728,33 @@ end
 ---@return boolean forced Whether the game is forced to be in fullscreen mode (on mobile platforms and consoles).
 function Kristal.isForcedFullscreen()
     return Kristal.isMobile() or Kristal.isConsole()
+end
+
+---@param path string
+function Kristal.openSavePermissions(path)
+    local info = love.filesystem.getInfo(path)
+    if not info then return end
+
+    if FFI.C.chmod(love.filesystem.getSaveDirectory() .. "/" .. path,
+            info.type == "directory" and 511 or 438) ~= 0 then
+        return
+    end
+
+    if info.type == "directory" then
+        for _, item in ipairs(love.filesystem.getDirectoryItems(path)) do
+            Kristal.openSavePermissions(path .. "/" .. item)
+        end
+    end
+end
+
+function Kristal.openSaveDirectory()
+    if not Kristal.isMobile() then return end
+
+    FFI.C.chmod(love.filesystem.getSaveDirectory(), 511)
+
+    for _, path in ipairs({ "settings.json", "keybinds.json", "mods", "saves", "screenshots" }) do
+        Kristal.openSavePermissions(path)
+    end
 end
 
 ---@return boolean mobile
