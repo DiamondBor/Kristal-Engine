@@ -267,6 +267,9 @@ KRISTAL_EVENT = {
     onMousePressed = "onMousePressed", -- mouse button pressed / at: love.mousepressed(win_x, win_y, button, istouch, presses) / passes: number:x, number:y, int:button, bool:istouch, int:presses / returns:NONE
     onMouseReleased = "onMouseReleased", -- mouse button release / at: love.mousereleased(x, y, button, istouch, presses) / passes: number:x, number:y, int:button, bool:istouch, int:presses / returns:NONE
     onTextInput = "onTextInput", -- character is read for text / love.textinput(key) / passes: string:key / returns: NONE
+    onTouchMoved = "onTouchMoved", -- touch is dragged / at: love.touchmoved(id, win_x, win_y, win_dx, win_dy, pressure) / passes: any:id, number:x, number:y, number:dx, number:dy, number:pressure / returns: NONE
+    onTouchPressed = "onTouchPressed", -- screen is touched / at: love.touchpressed(id, win_x, win_y, win_dx, win_dy, pressure) / passes: any:id, number:x, number:y, number:pressure / returns: NONE
+    onTouchReleased = "onTouchReleased", -- touch is lifted / at: love.touchreleased(id, win_x, win_y, win_dx, win_dy, pressure) / passes: any:id, number:x, number:y, number:pressure / returns: NONE
     onWheelMoved = "onWheelMoved", -- mouse wheel is moved / at: Game:onWheelMoved(x, y) / passes: int:x, int:y / returns: NONE
 
     --map events--
