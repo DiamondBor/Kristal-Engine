@@ -1,0 +1,146 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  BUILD_TOOLS_VERSION: 34.0.0
+  APP_NAME: Kristal
+
+jobs:
+  apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          path: kristal
+
+      - name: Checkout LOVE
+        uses: actions/checkout@v4
+        with:
+          repository: love2d/love-android
+          ref: 11.5a
+          submodules: recursive
+          path: love-android
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK packages
+        run: >
+          sdkmanager
+          "platforms;android-34"
+          "build-tools;33.0.1"
+          "build-tools;${{ env.BUILD_TOOLS_VERSION }}"
+          "ndk;25.2.9519653"
+          "cmake;3.22.1"
+
+      - name: Package Kristal
+        run: |
+          assets="$GITHUB_WORKSPACE/love-android/app/src/embed/assets"
+          mkdir -p "$assets"
+
+          git -C kristal archive --format=zip -o "$assets/game.love" HEAD
+
+      - name: Set save directory
+        run: |
+          file=love-android/love/src/jni/love/src/modules/filesystem/physfs/Filesystem.cpp
+          original='save_path_full = storage_path + std::string("/save/") + save_identity;'
+          replacement="save_path_full = storage_path.substr(0, storage_path.find_last_of('/'));"
+
+          if ! grep -qF "$original" "$file"; then
+            echo "::error::Save path not found"
+            exit 1
+          fi
+
+          sed -i "s|$original|$replacement|" "$file"
+
+      - name: Set icon
+        run: |
+          pip install --quiet pillow
+          python - <<'PYTHON'
+
+          from PIL import Image
+          source = Image.open("kristal/icon.png").convert("RGBA")
+          upscaled = source.resize((576, 576), Image.NEAREST)
+
+          for density, size in {"ldpi": 36, "mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}.items():
+              upscaled.resize((size, size), Image.BOX).save(f"love-android/app/src/main/res/drawable-{density}/love.png")
+          PYTHON
+
+      - name: Configure app metadata
+        run: |
+          cd love-android
+
+          version="$(tr -d ' \r\n' < ../kristal/VERSION)"
+
+          sed -i "s/^app\.name_byte_array=.*/app.name=${APP_NAME}/" gradle.properties
+          sed -i "s/^app\.application_id=.*/app.application_id=cc.kristal.kristalengine/" gradle.properties
+          sed -i "s/^app\.version_name=.*/app.version_name=${version}/" gradle.properties
+          sed -i "s/^app\.version_code=.*/app.version_code=${{ github.run_number }}/" gradle.properties
+
+          echo "KRISTAL_VERSION=${version}" >> "$GITHUB_ENV"
+
+      - name: Build
+        run: |
+          cd love-android
+          bash gradlew --no-daemon assembleEmbedNoRecordRelease
+
+      - name: Sign APK
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          tools="${ANDROID_HOME}/build-tools/${BUILD_TOOLS_VERSION}"
+          unsigned="$(find love-android/app/build/outputs/apk -name '*-unsigned.apk' | head -n 1)"
+
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
+            : "${KEYSTORE_PASSWORD:?set the ANDROID_KEYSTORE_PASSWORD secret alongside ANDROID_KEYSTORE_BASE64}"
+            : "${KEY_ALIAS:?set the ANDROID_KEY_ALIAS secret alongside ANDROID_KEYSTORE_BASE64}"
+            : "${KEY_PASSWORD:?set the ANDROID_KEY_PASSWORD secret alongside ANDROID_KEYSTORE_BASE64}"
+          else
+            KEYSTORE_PASSWORD=kristal
+            KEY_ALIAS=kristal
+            KEY_PASSWORD=kristal
+            keytool -genkeypair -keystore keystore.jks -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -storepass "$KEYSTORE_PASSWORD" -keypass "$KEY_PASSWORD" \
+              -dname "CN=${APP_NAME}"
+            echo "::warning::There is no signing key configured"
+          fi
+
+          "$tools/zipalign" -p -f 4 "$unsigned" aligned.apk
+          "$tools/apksigner" sign \
+            --ks keystore.jks \
+            --ks-pass "pass:${KEYSTORE_PASSWORD}" \
+            --ks-key-alias "${KEY_ALIAS}" \
+            --key-pass "pass:${KEY_PASSWORD}" \
+            --out kristal.apk \
+            aligned.apk
+          "$tools/apksigner" verify kristal.apk
+
+          rm -f keystore.jks aligned.apk
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: kristal-${{ env.KRISTAL_VERSION }}-${{ github.run_number }}-apk
+          path: kristal.apk
