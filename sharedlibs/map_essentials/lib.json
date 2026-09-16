@@ -1,0 +1,15 @@
+{
+    "id": "map_essentials",
+
+    "authors": [
+        "DiamondBor"
+    ],
+
+    "version": "v1.0.0",
+    "engineVer": "v0.11.0-dev",
+    "default": true,
+
+    "config": {
+
+    }
+}

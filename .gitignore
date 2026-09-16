@@ -10,6 +10,10 @@ output/
 *.tiled-session
 
 docs.json
-/sharedlibs
+/sharedlibs/*
+!/sharedlibs/map_essentials/
+!/sharedlibs/uibox_customizer/
 Kristal.lnk
 open.bat
+mod_template/.luarc.json
+mods/example/.luarc.json

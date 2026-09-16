@@ -855,6 +855,13 @@ function Registry.initTilesets()
         self.registerTileset(path, Tileset(data, full_path, FileSystemUtils.getDirname(full_path)))
     end
 
+    if Mod then
+        for _, library in Kristal.iterLibraries() do
+            self:loadTilesetDirectory(library.info.path .. "/scripts/world/tilesets")
+        end
+        self:loadTilesetDirectory(Mod.info.path .. "/scripts/world/tilesets")
+    end
+
     Kristal.callEvent(KRISTAL_EVENT.onRegisterTilesets)
 end
 
@@ -882,7 +889,114 @@ function Registry.initMaps()
         end
     end
 
+    if Mod then
+        for _, library in Kristal.iterLibraries() do
+            self:loadMapDirectory(library.info.path .. "/scripts/world/maps")
+        end
+        self:loadMapDirectory(Mod.info.path .. "/scripts/world/maps")
+    end
+
     Kristal.callEvent(KRISTAL_EVENT.onRegisterMaps)
+end
+
+---@param hex string
+function Registry.preparseColorProperty(hex)
+    local color
+    if #hex == 7 then
+        color = ColorUtils.hexToRGB(hex)
+    else
+        color = assert(TiledUtils.parseColorProperty(hex))
+    end
+    assert(#color >= 3)
+    color[1] = color[1] * 255
+    color[2] = color[2] * 255
+    color[3] = color[3] * 255
+    color[4] = (color[4] or 1) * 255
+    return color
+end
+
+function Registry:loadTilesetDirectory(dir)
+    for _, path in ipairs(FileSystemUtils.getFilesRecursive(dir, ".tsj")) do
+        local full_path = dir .. "/" .. path
+        local data = JSON.decode(love.filesystem.read(full_path .. ".tsj"))
+        data = self:processTileset(data)
+        local split_path = StringUtils.split(path, "/", true)
+        data.full_path = full_path
+
+        data.id = path
+
+        Registry.registerTileset(data.id, Tileset(data, full_path, FileSystemUtils.getDirname(full_path)))
+    end
+end
+
+function Registry:processTileset(tileset)
+    tileset.properties = self:processProperties(tileset.properties)
+    return tileset
+end
+
+function Registry:loadMapDirectory(dir)
+    for _, path in ipairs(FileSystemUtils.getFilesRecursive(dir, ".tmj")) do
+        local full_path = dir .. "/" .. path
+        local data = JSON.decode(love.filesystem.read(full_path .. ".tmj"))
+        local split_path = StringUtils.split(path, "/", true)
+        data.full_path = full_path
+        data.properties = self:processProperties(data.properties)
+
+        if data.backgroundcolor then
+            data.backgroundcolor = Registry.preparseColorProperty(data.backgroundcolor)
+        end
+
+        if split_path[#split_path] == "data" then
+            data.id = table.concat(split_path, "/", 1, #split_path - 1)
+        else
+            data.id = path
+        end
+
+        for _, tileset in ipairs(data.tilesets) do
+            if tileset.source then
+                tileset.filename = tileset.source
+            else
+                -- TODO: Support embedded tilesets
+                error("Encountered unsupported embedded tileset in "..full_path..".tmj")
+            end
+        end
+
+        for i, layer in ipairs(data.layers) do
+           data.layers[i] = self:processLayer(layer) 
+        end
+
+        Registry.registerMapData(data.id, data)
+    end
+end
+
+function Registry:processProperties(properties)
+    local output = {}
+    for _, prop in ipairs(properties or {}) do
+        output[prop.name] = prop.type == "object" and { id = prop.value } or prop.value
+    end
+    return output
+end
+
+function Registry:processLayer(layer)
+    layer.properties = self:processProperties(layer.properties)
+    layer.parallaxx = layer.parallaxx or 1
+    layer.parallaxy = layer.parallaxy or 1
+    if layer.tintcolor then
+        layer.tintcolor = Registry.preparseColorProperty(layer.tintcolor)
+    end
+    if layer.type == "objectgroup" then
+        for _,obj in ipairs(layer.objects) do
+            obj.shape = (obj.point and "point") or (obj.polygon and "polygon") or (obj.polyline and "polyline") or (obj.capsule and "capsule") or (obj.ellipse and "ellipse") or obj.shape or "rectangle"
+            obj.properties = self:processProperties(obj.properties)
+        end
+    elseif layer.type == "group" then
+        for i,sublayer in ipairs(layer.layers) do
+            layer.layers[i] = self:processLayer(sublayer)
+        end
+    elseif layer.type == "tilelayer" then
+        layer.encoding = layer.encoding or "lua"
+    end
+    return layer
 end
 
 function Registry.initLegacyEvents()
