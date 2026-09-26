@@ -972,7 +972,20 @@ end
 function Registry:processProperties(properties)
     local output = {}
     for _, prop in ipairs(properties or {}) do
-        output[prop.name] = prop.type == "object" and { id = prop.value } or prop.value
+        local value = prop.value
+        if prop.type == "object" then
+            value = { id = value }
+        elseif prop.type == "list" or prop.type == "class" then
+            local nested = {}
+            for key, item in pairs(value) do
+                if prop.type == "class" then
+                    item = { type = type(item) == "table" and (item[1] and "list" or "class") or nil, value = item }
+                end
+                table.insert(nested, { name = key, type = item.type ~= "object" and item.type or nil, value = item.value })
+            end
+            value = self:processProperties(nested)
+        end
+        output[prop.name] = value
     end
     return output
 end
